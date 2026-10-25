@@ -1,7 +1,7 @@
 name: Release
 
 # Push a tag like v1.0.0 (matching Cargo.toml and package.json) to build the
-# macOS binaries, attach them to a GitHub Release, and publish to npm.
+# macOS, Linux and Windows binaries, attach them to a GitHub Release, and publish to npm.
 
 on:
   push:
@@ -47,6 +47,12 @@ jobs:
             target: aarch64-apple-darwin
           - os: macos-latest
             target: x86_64-apple-darwin
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -57,11 +63,16 @@ jobs:
       - name: Build
         run: cargo build --release --locked --target "${{ matrix.target }}"
       - name: Package
+        shell: bash
         run: |
           asset="note-$VERSION-${{ matrix.target }}.tar.gz"
+          bin=note
+          if [ "$RUNNER_OS" = "Windows" ]; then bin=note.exe; fi
           mkdir dist
-          COPYFILE_DISABLE=1 tar -C "target/${{ matrix.target }}/release" -czf "dist/$asset" note
-          (cd dist && shasum -a 256 "$asset" > "$asset.sha256" && cat "$asset.sha256")
+          COPYFILE_DISABLE=1 tar -C "target/${{ matrix.target }}/release" -czf "dist/$asset" "$bin"
+          cd dist
+          if command -v sha256sum > /dev/null; then sha256sum "$asset" > "$asset.sha256"; else shasum -a 256 "$asset" > "$asset.sha256"; fi
+          cat "$asset.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: note-${{ matrix.target }}
@@ -96,9 +107,13 @@ jobs:
           fi
 
   smoke:
-    name: Install from release (macOS)
+    name: Install from release (${{ matrix.os }})
     needs: release
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -107,10 +122,12 @@ jobs:
       - name: Test installer
         run: npm test
       - name: Install packed tarball and run it
+        shell: bash
         run: |
           npm pack
-          npm install -g ./baiehclaca-note-*.tgz
-          test -x "$(npm root -g)/@baiehclaca/note/vendor/note"
+          npm install -g ./sendroon-note-*.tgz
+          vendor="$(npm root -g)/@sendroon/note/vendor"
+          test -f "$vendor/note" || test -f "$vendor/note.exe"
           note --help
 
   publish:

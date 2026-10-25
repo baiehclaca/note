@@ -39,7 +39,7 @@ npm install -g @sendroon/note
 
 Or build from source: `cargo install --git https://github.com/baiehclaca/note`
 
-The npm package is macOS only for now. On Windows and Linux, build from source.
+Works on macOS, Linux and Windows (x64; arm64 on macOS and Linux).
 
 **How it works:** your words are stored as the folder's comment, and nothing is added inside the folder. Where that comment is searchable depends on your system:
 
