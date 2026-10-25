@@ -49,7 +49,7 @@ fn set(
     err: &mut dyn Write,
 ) -> Result<(), NoteError> {
     let folder = resolve_folder(path.as_deref())?;
-    let text = validate_note(text)?;
+    let text = validate_note(text, &|text| backend.stored_len(text))?;
     let warnings = backend.write(&folder, text)?;
     write_all(out, &format!("{}\n{text}\n", folder.display()))?;
     for warning in warnings {
@@ -190,6 +190,26 @@ mod tests {
             .to_string()
             .contains("is a file"));
         assert!(backend.notes.borrow().is_empty());
+    }
+
+    #[test]
+    fn the_limit_uses_the_backend_measure() {
+        let text = format!("{}\u{e9}", "a".repeat(1200));
+        let plain = MemoryBackend::default();
+        let folder = TempFolder::new("app");
+        run(&plain, &["--path", path_arg(&folder), &text])
+            .result
+            .unwrap();
+
+        let utf16 = MemoryBackend {
+            utf16: true,
+            ..MemoryBackend::default()
+        };
+        let refused = run(&utf16, &["--path", path_arg(&folder), &text]);
+        let error = refused.result.unwrap_err();
+        assert_eq!(error.code(), 1);
+        assert!(error.to_string().contains("takes 2402 bytes"), "{error}");
+        assert!(utf16.notes.borrow().is_empty());
     }
 
     #[test]

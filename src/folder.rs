@@ -48,16 +48,21 @@ fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
 }
 
 /// Trims the note and checks it can be stored. Returns the text to store.
-pub fn validate_note(text: &str) -> Result<&str, NoteError> {
+///
+/// `stored_len` measures the note the way the OS stores it (see
+/// [`crate::backend::Backend::stored_len`]), so the limit is in stored bytes.
+pub fn validate_note<'a>(
+    text: &'a str,
+    stored_len: &dyn Fn(&str) -> usize,
+) -> Result<&'a str, NoteError> {
     let text = text.trim();
     if text.is_empty() {
         return Err(NoteError::Failed("The note is empty.".into()));
     }
-    if text.len() > MAX_NOTE_BYTES {
+    let stored = stored_len(text);
+    if stored > MAX_NOTE_BYTES {
         return Err(NoteError::Failed(format!(
-            "That note is {} bytes. A folder note can be at most {} bytes, which is what Spotlight will keep with the folder.",
-            text.len(),
-            MAX_NOTE_BYTES
+            "That note takes {stored} bytes as stored on this system. A folder note can be at most {MAX_NOTE_BYTES} bytes; see note --help."
         )));
     }
     if text
@@ -145,19 +150,36 @@ mod tests {
         assert_eq!(device, PathBuf::from(r"\\?\Volume{1}\x"));
     }
 
+    fn utf8(text: &str) -> usize {
+        text.len()
+    }
+
     #[test]
     fn notes_are_trimmed_and_checked() {
-        assert_eq!(validate_note("  blue deck\n").unwrap(), "blue deck");
-        assert_eq!(validate_note("a\tb\nc").unwrap(), "a\tb\nc");
+        assert_eq!(validate_note("  blue deck\n", &utf8).unwrap(), "blue deck");
+        assert_eq!(validate_note("a\tb\nc", &utf8).unwrap(), "a\tb\nc");
         assert_eq!(
-            validate_note("   \n").unwrap_err(),
+            validate_note("   \n", &utf8).unwrap_err(),
             NoteError::Failed("The note is empty.".into())
         );
         let long = "a".repeat(MAX_NOTE_BYTES + 1);
-        let error = validate_note(&long).unwrap_err();
+        let error = validate_note(&long, &utf8).unwrap_err();
+        assert!(error.to_string().contains("takes 2049 bytes"), "{error}");
         assert!(error.to_string().contains("at most 2048 bytes"), "{error}");
-        assert!(validate_note(&"a".repeat(MAX_NOTE_BYTES)).is_ok());
-        let error = validate_note("bell\u{7}").unwrap_err();
+        assert!(validate_note(&"a".repeat(MAX_NOTE_BYTES), &utf8).is_ok());
+        let error = validate_note("bell\u{7}", &utf8).unwrap_err();
         assert!(error.to_string().contains("control character"), "{error}");
+    }
+
+    #[test]
+    fn the_limit_is_in_stored_bytes() {
+        // 1025 characters: 1026 bytes of UTF-8, 2050 bytes of UTF-16.
+        let text = format!("{}\u{e9}", "a".repeat(1024));
+        assert!(validate_note(&text, &utf8).is_ok());
+        let utf16 = |text: &str| text.encode_utf16().count() * 2;
+        let error = validate_note(&text, &utf16).unwrap_err();
+        assert!(error.to_string().contains("takes 2050 bytes"), "{error}");
+        // Trimmed text is what gets measured.
+        assert!(validate_note(&format!("  {}  ", "a".repeat(MAX_NOTE_BYTES)), &utf8).is_ok());
     }
 }

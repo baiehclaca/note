@@ -97,8 +97,9 @@ Nothing is written inside the folder.
 
     fn help_details(&self) -> &'static str {
         "\
-A note can be up to 2048 bytes. note find walks your home folder (or
---path) and reads each folder's note, skipping hidden folders, so it
+A note can be up to 2048 bytes of UTF-8: one byte per ASCII character,
+two to four for others. note find walks your home folder (or --path) and
+reads each folder's note, skipping hidden folders, so it
 needs no indexer but can take a while on a big tree. On KDE with file
 indexing on, baloosearch userComment:WORD finds notes too; GNOME search
 does not. The filesystem must support user xattrs (ext4, btrfs and xfs

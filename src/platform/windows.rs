@@ -101,8 +101,8 @@ stream named note.comment. Nothing is written inside the folder.
 
     fn help_details(&self) -> &'static str {
         "\
-A note can be up to 2048 bytes. Windows Search and Explorer do not see
-the note: note find walks your user folder (or --path) and reads each
+A note can be up to 2048 bytes of UTF-8: one byte per ASCII character,
+two to four for others. Windows Search and Explorer do not see the note: note find walks your user folder (or --path) and reads each
 folder's note, skipping hidden and system folders, so it can take a while
 on a big tree. The note needs an NTFS or ReFS drive and is lost on FAT or
 exFAT drives, in zip files, in git and with most cloud sync.
