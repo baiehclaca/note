@@ -1,4 +1,4 @@
-use crate::store::NoteError;
+use crate::NoteError;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -135,14 +135,12 @@ fn set_mode(current: Mode, next: Mode) -> Result<Mode, NoteError> {
     Ok(next)
 }
 
-pub fn help_text() -> &'static str {
-    "\
-note tags the current folder so Spotlight can find it.
-
-The words you pass become the folder's Finder comment. Spotlight indexes
-that comment, so a search for those words returns the folder. Nothing is
-written inside the folder.
-
+/// The full `note --help` text. `intro` and `details` come from the
+/// platform backend because what stores and searches the note differs per OS.
+pub fn help_text(intro: &str, details: &str) -> String {
+    format!(
+        "\
+{intro}
 Usage:
   note [words...]          Set the note on this folder
   note                     Show the note
@@ -153,15 +151,13 @@ Usage:
   note -- clear            Save a note whose text is \"clear\"
   note -- help             Save a note whose text is \"help\"
 
-A note can be up to 2048 bytes. Search can take a few seconds. Spotlight
-skips hidden folders and temporary folders. The note is metadata on the
-folder, so it stays with the folder on this Mac and is not a file in git.
-
+{details}
 Examples:
   cd ~/Projects/client-work
   note prague pitch, march, the blue deck
   note find prague
 "
+    )
 }
 
 #[cfg(test)]
@@ -225,5 +221,70 @@ mod tests {
             Err(NoteError::Usage(_))
         ));
         assert!(matches!(parse(["help"]), Ok(Action::Help)));
+    }
+
+    #[test]
+    fn path_and_mode_flags_are_checked() {
+        assert!(matches!(parse(["--path"]), Err(NoteError::Usage(_))));
+        assert!(matches!(
+            parse(["--path", "a", "--path", "b"]),
+            Err(NoteError::Usage(_))
+        ));
+        assert!(matches!(
+            parse(["--clear", "--find", "x"]),
+            Err(NoteError::Usage(_))
+        ));
+        assert!(matches!(
+            parse(["--clear", "extra"]),
+            Err(NoteError::Usage(_))
+        ));
+        match parse_args(&["--find", "--path", "/tmp", "blue"]) {
+            Action::Find { path, query } => {
+                assert_eq!(path.unwrap(), PathBuf::from("/tmp"));
+                assert_eq!(query, "blue");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn words_after_double_dash_are_text() {
+        match parse_args(&["--", "--help", "-x", "find"]) {
+            Action::Set { text, .. } => assert_eq!(text, "--help -x find"),
+            other => panic!("unexpected {other:?}"),
+        }
+        match parse_args(&["-", "dash"]) {
+            Action::Set { text, .. } => assert_eq!(text, "- dash"),
+            other => panic!("unexpected {other:?}"),
+        }
+        match parse_args(&["--path", "/tmp", "help"]) {
+            Action::Set { text, .. } => assert_eq!(text, "help"),
+            other => panic!("unexpected {other:?}"),
+        }
+        match parse_args(&["help", "me"]) {
+            Action::Set { text, .. } => assert_eq!(text, "help me"),
+            other => panic!("unexpected {other:?}"),
+        }
+        assert!(matches!(parse_args(&["-h", "x"]), Action::Help));
+    }
+
+    #[test]
+    fn find_needs_real_words() {
+        assert!(matches!(parse(["find", " ", ""]), Err(NoteError::Usage(_))));
+        assert!(matches!(parse(["--find"]), Err(NoteError::Usage(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn notes_must_be_text() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        let bad = OsStr::from_bytes(&[0x66, 0xff, 0x6f]);
+        assert!(matches!(parse([bad]), Err(NoteError::Failed(_))));
+        // A non-UTF-8 folder name is fine.
+        match parse([OsStr::new("--path"), bad]).unwrap() {
+            Action::Show { path } => assert_eq!(path.unwrap().as_os_str(), bad),
+            other => panic!("unexpected {other:?}"),
+        }
     }
 }

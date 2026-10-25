@@ -5,9 +5,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn set_show_and_clear_roundtrip() {
-    let folder = temp_folder().canonicalize().unwrap();
+    let folder = temp_folder();
     let note_text = "Praha — client \"Q3\" files";
 
     let set = note(&folder, &[note_text]);
@@ -33,7 +33,7 @@ fn set_show_and_clear_roundtrip() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn a_file_and_an_empty_note_fail() {
     let folder = temp_folder();
     let file = folder.join("file.txt");
@@ -55,17 +55,67 @@ fn help_exits_cleanly() {
     let folder = temp_folder();
     let help = note(&folder, &["--help"]);
     assert!(help.status.success());
-    assert!(String::from_utf8_lossy(&help.stdout).contains("Spotlight"));
+    let text = String::from_utf8_lossy(&help.stdout);
+    assert!(text.contains("note find [words...]"), "{text}");
+    if cfg!(target_os = "macos") {
+        assert!(text.contains("Spotlight"), "{text}");
+    }
+    if cfg!(windows) {
+        assert!(text.contains("alternate data"), "{text}");
+    }
+    if cfg!(target_os = "linux") {
+        assert!(text.contains("user.xdg.comment"), "{text}");
+    }
     fs::remove_dir_all(&folder).unwrap();
 }
 
 #[test]
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 fn other_systems_get_a_clear_error() {
     let folder = temp_folder();
     let set = note(&folder, &["hello"]);
     assert_eq!(set.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&set.stderr).contains("only works on macOS"));
+    assert!(
+        String::from_utf8_lossy(&set.stderr).contains("not supported")
+            || String::from_utf8_lossy(&set.stderr).contains("no way to store")
+    );
+    fs::remove_dir_all(&folder).unwrap();
+}
+
+/// Where no indexer is involved, `note find` sees a note right away.
+#[test]
+#[cfg(any(target_os = "linux", windows))]
+fn find_returns_the_tagged_folder() {
+    let root = temp_folder();
+    let client = root.join("clients").join("prague");
+    fs::create_dir_all(&client).unwrap();
+
+    let set = note(&client, &["prague pitch, the blue deck"]);
+    assert!(set.status.success(), "{}", stderr(&set));
+
+    let root_arg = root.to_str().unwrap();
+    let found = note(&root, &["--path", root_arg, "find", "Blue Deck"]);
+    assert!(found.status.success(), "{}", stderr(&found));
+    assert_eq!(
+        String::from_utf8_lossy(&found.stdout),
+        format!("{}\n", client.display())
+    );
+
+    let none = note(&root, &["--path", root_arg, "find", "green"]);
+    assert_eq!(none.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&none.stderr).contains("No folders"));
+
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn usage_errors_exit_with_two() {
+    let folder = temp_folder();
+    for args in [&["--nope"][..], &["find"], &["clear", "extra"], &["--path"]] {
+        let output = note(&folder, args);
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("note"));
+    }
     fs::remove_dir_all(&folder).unwrap();
 }
 
@@ -77,11 +127,13 @@ fn note(folder: &Path, args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 fn stderr(output: &std::process::Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
+/// A fresh folder, as `note` prints it: canonical, and on Windows without
+/// the `\\?\` prefix `canonicalize` adds.
 fn temp_folder() -> PathBuf {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -91,5 +143,9 @@ fn temp_folder() -> PathBuf {
         .as_millis();
     let path = std::env::temp_dir().join(format!("note-cli-{millis}-{n}"));
     fs::create_dir_all(&path).unwrap();
-    path
+    let path = path.canonicalize().unwrap();
+    match path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
+        Some(rest) if cfg!(windows) => PathBuf::from(rest),
+        _ => path,
+    }
 }
