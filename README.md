@@ -34,9 +34,10 @@ note find prague                          # weeks later, from any folder
 ## Install
 
 ```sh
-git clone https://github.com/baiehclaca/note && cd note
-cargo build --release && cp target/release/note ~/bin/note
+npm install -g @baiehclaca/note
 ```
+
+Or build from source: `cargo install --git https://github.com/baiehclaca/note`
 
 macOS only for now. Windows and Linux: coming.
 

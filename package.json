@@ -1,0 +1,48 @@
+{
+  "name": "@baiehclaca/note",
+  "version": "1.0.0",
+  "description": "Leave a note on any folder. Spotlight remembers it for you.",
+  "keywords": [
+    "cli",
+    "notes",
+    "folders",
+    "spotlight",
+    "finder",
+    "macos",
+    "tag",
+    "search"
+  ],
+  "homepage": "https://github.com/baiehclaca/note#readme",
+  "bugs": {
+    "url": "https://github.com/baiehclaca/note/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baiehclaca/note.git"
+  },
+  "license": "UNLICENSED",
+  "bin": {
+    "note": "bin/note.js"
+  },
+  "files": [
+    "bin/note.js",
+    "scripts/install.js"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "test": "node --test scripts/install.test.js"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

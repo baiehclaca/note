@@ -1,0 +1,139 @@
+name: Release
+
+# Push a tag like v1.0.0 (matching Cargo.toml and package.json) to build the
+# macOS binaries, attach them to a GitHub Release, and publish to npm.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Check versions
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        name: Tag, Cargo.toml and package.json agree
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo=$(sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -n1)
+          npm=$(node -p "require('./package.json').version")
+          echo "tag=$tag cargo=$cargo npm=$npm"
+          if [ "$tag" != "$cargo" ] || [ "$tag" != "$npm" ]; then
+            echo "::error::Tag v$tag, Cargo.toml $cargo and package.json $npm must match"
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked --target "${{ matrix.target }}"
+      - name: Package
+        run: |
+          asset="note-$VERSION-${{ matrix.target }}.tar.gz"
+          mkdir dist
+          COPYFILE_DISABLE=1 tar -C "target/${{ matrix.target }}/release" -czf "dist/$asset" note
+          (cd dist && shasum -a 256 "$asset" > "$asset.sha256" && cat "$asset.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: note-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: note-*
+          merge-multiple: true
+      - name: Verify checksums
+        working-directory: dist
+        run: sha256sum -c ./*.sha256
+      - name: Create or update release
+        run: |
+          if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "v$VERSION" dist/* --clobber -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "v$VERSION" dist/* -R "$GITHUB_REPOSITORY" \
+              --title "v$VERSION" --generate-notes --verify-tag
+          fi
+
+  smoke:
+    name: Install from release (macOS)
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test installer
+        run: npm test
+      - name: Install packed tarball and run it
+        run: |
+          npm pack
+          npm install -g ./baiehclaca-note-*.tgz
+          test -x "$(npm root -g)/@baiehclaca/note/vendor/note"
+          note --help
+
+  publish:
+    name: Publish to npm
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # npm provenance
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Require NPM_TOKEN
+        if: env.NPM_TOKEN == ''
+        run: |
+          echo "::error::Repository secret NPM_TOKEN is not set; the GitHub Release is out, npm publish skipped."
+          exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Publish
+        run: npm publish --provenance --access public --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
