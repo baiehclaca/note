@@ -10,7 +10,7 @@ pub struct Unsupported;
 
 fn unsupported() -> NoteError {
     NoteError::Failed(
-        "note stores notes as Finder comments for Spotlight, so it only works on macOS for now."
+        "note has no way to store folder notes on this operating system yet. It works on macOS and Linux."
             .into(),
     )
 }
@@ -34,9 +34,9 @@ impl Backend for Unsupported {
 
     fn help_intro(&self) -> &'static str {
         "\
-note tags a folder with a note you can search for. On this system it is
-not supported yet; it works on macOS, where the note is the folder's
-Finder comment and Spotlight searches it.
+note tags a folder with a note you can search for. This operating system
+is not supported yet; note works on macOS (Finder comment, searched by
+Spotlight) and Linux (user.xdg.comment extended attribute).
 "
     }
 

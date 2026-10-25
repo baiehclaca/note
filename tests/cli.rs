@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn set_show_and_clear_roundtrip() {
     let folder = temp_folder().canonicalize().unwrap();
     let note_text = "Praha — client \"Q3\" files";
@@ -33,7 +33,7 @@ fn set_show_and_clear_roundtrip() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn a_file_and_an_empty_note_fail() {
     let folder = temp_folder();
     let file = folder.join("file.txt");
@@ -55,18 +55,54 @@ fn help_exits_cleanly() {
     let folder = temp_folder();
     let help = note(&folder, &["--help"]);
     assert!(help.status.success());
-    assert!(String::from_utf8_lossy(&help.stdout).contains("Spotlight"));
+    let text = String::from_utf8_lossy(&help.stdout);
+    assert!(text.contains("note find [words...]"), "{text}");
+    if cfg!(target_os = "macos") {
+        assert!(text.contains("Spotlight"), "{text}");
+    }
+    if cfg!(target_os = "linux") {
+        assert!(text.contains("user.xdg.comment"), "{text}");
+    }
     fs::remove_dir_all(&folder).unwrap();
 }
 
 #[test]
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn other_systems_get_a_clear_error() {
     let folder = temp_folder();
     let set = note(&folder, &["hello"]);
     assert_eq!(set.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&set.stderr).contains("only works on macOS"));
+    assert!(
+        String::from_utf8_lossy(&set.stderr).contains("not supported")
+            || String::from_utf8_lossy(&set.stderr).contains("no way to store")
+    );
     fs::remove_dir_all(&folder).unwrap();
+}
+
+/// Where no indexer is involved, `note find` sees a note right away.
+#[test]
+#[cfg(target_os = "linux")]
+fn find_returns_the_tagged_folder() {
+    let root = temp_folder().canonicalize().unwrap();
+    let client = root.join("clients").join("prague");
+    fs::create_dir_all(&client).unwrap();
+
+    let set = note(&client, &["prague pitch, the blue deck"]);
+    assert!(set.status.success(), "{}", stderr(&set));
+
+    let root_arg = root.to_str().unwrap();
+    let found = note(&root, &["--path", root_arg, "find", "Blue Deck"]);
+    assert!(found.status.success(), "{}", stderr(&found));
+    assert_eq!(
+        String::from_utf8_lossy(&found.stdout),
+        format!("{}\n", client.display())
+    );
+
+    let none = note(&root, &["--path", root_arg, "find", "green"]);
+    assert_eq!(none.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&none.stderr).contains("No folders"));
+
+    fs::remove_dir_all(&root).unwrap();
 }
 
 #[test]
@@ -88,7 +124,7 @@ fn note(folder: &Path, args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn stderr(output: &std::process::Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }

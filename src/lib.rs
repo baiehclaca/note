@@ -9,6 +9,9 @@ mod cli;
 mod error;
 mod folder;
 mod platform;
+// The tree-walk search used by the Linux backend; its tests run everywhere.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+mod scan;
 
 use std::ffi::OsString;
 
