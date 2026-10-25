@@ -69,6 +69,17 @@ fn other_systems_get_a_clear_error() {
     fs::remove_dir_all(&folder).unwrap();
 }
 
+#[test]
+fn usage_errors_exit_with_two() {
+    let folder = temp_folder();
+    for args in [&["--nope"][..], &["find"], &["clear", "extra"], &["--path"]] {
+        let output = note(&folder, args);
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("note"));
+    }
+    fs::remove_dir_all(&folder).unwrap();
+}
+
 fn note(folder: &Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_note"))
         .args(args)
