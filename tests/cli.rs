@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
+#[cfg(target_os = "macos")]
 fn set_show_and_clear_roundtrip() {
     let folder = temp_folder().canonicalize().unwrap();
     let note_text = "Praha — client \"Q3\" files";
@@ -32,6 +33,7 @@ fn set_show_and_clear_roundtrip() {
 }
 
 #[test]
+#[cfg(target_os = "macos")]
 fn a_file_and_an_empty_note_fail() {
     let folder = temp_folder();
     let file = folder.join("file.txt");
@@ -57,6 +59,16 @@ fn help_exits_cleanly() {
     fs::remove_dir_all(&folder).unwrap();
 }
 
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn other_systems_get_a_clear_error() {
+    let folder = temp_folder();
+    let set = note(&folder, &["hello"]);
+    assert_eq!(set.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&set.stderr).contains("only works on macOS"));
+    fs::remove_dir_all(&folder).unwrap();
+}
+
 fn note(folder: &Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_note"))
         .args(args)
@@ -65,6 +77,7 @@ fn note(folder: &Path, args: &[&str]) -> std::process::Output {
         .unwrap()
 }
 
+#[cfg(target_os = "macos")]
 fn stderr(output: &std::process::Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }

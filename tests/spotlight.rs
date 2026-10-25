@@ -1,3 +1,6 @@
+//! Live Spotlight check. It needs macOS with indexing turned on.
+#![cfg(target_os = "macos")]
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
@@ -15,6 +18,10 @@ fn spotlight_returns_the_tagged_folder() {
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .canonicalize()
         .unwrap();
+    if let Some(reason) = spotlight_unavailable(&folder) {
+        eprintln!("skipping: {reason}");
+        return;
+    }
     let bin = env!("CARGO_BIN_EXE_note");
     let id = format!(
         "zxqnote{}{}",
@@ -79,6 +86,24 @@ fn spotlight_returns_the_tagged_folder() {
         "Spotlight did not return {}\n{last}",
         folder.display()
     );
+}
+
+/// CI machines often run with Spotlight indexing turned off. The invariant
+/// can only be checked where Spotlight is actually indexing this volume.
+fn spotlight_unavailable(folder: &Path) -> Option<String> {
+    let status = match Command::new("mdutil").arg("-s").arg(folder).output() {
+        Ok(output) => output,
+        Err(error) => return Some(format!("mdutil failed: {error}")),
+    };
+    let text = String::from_utf8_lossy(&status.stdout).to_lowercase();
+    if !status.status.success() || text.contains("disabled") || text.contains("unknown") {
+        return Some(format!(
+            "Spotlight is not indexing {}: {}",
+            folder.display(),
+            text.trim()
+        ));
+    }
+    None
 }
 
 struct Restore {

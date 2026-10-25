@@ -308,7 +308,7 @@ fn stderr(output: &Output) -> String {
 fn decode_hex(bytes: &[u8]) -> Result<Vec<u8>, NoteError> {
     let text = String::from_utf8_lossy(bytes);
     let hex: String = text.chars().filter(|c| !c.is_whitespace()).collect();
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err(NoteError::Failed(
             "The note on this folder is unreadable.".into(),
         ));
@@ -333,6 +333,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn stores_and_reads_the_exact_note() {
         let folder = temp_folder();
         let text = "Praha — client \"Q3\" files";
