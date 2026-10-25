@@ -34,7 +34,7 @@ note find prague                          # weeks later, from any folder
 ## Install
 
 ```sh
-npm install -g @baiehclaca/note
+npm install -g @sendroon/note
 ```
 
 Or build from source: `cargo install --git https://github.com/baiehclaca/note`
