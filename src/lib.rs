@@ -9,19 +9,26 @@ use std::path::PathBuf;
 
 pub use store::NoteError;
 
-#[cfg(not(target_os = "macos"))]
-compile_error!("note tags folders through macOS Spotlight and only builds on macOS");
-
 pub fn run<I, S>(args: I) -> Result<(), NoteError>
 where
     I: IntoIterator<Item = S>,
     S: Into<OsString>,
 {
-    match cli::parse(args)? {
-        cli::Action::Help => {
-            print!("{}", cli::help_text());
-            Ok(())
-        }
+    let action = cli::parse(args)?;
+    if let cli::Action::Help = action {
+        print!("{}", cli::help_text());
+        return Ok(());
+    }
+    if !cfg!(target_os = "macos") {
+        // The crate builds and its pure tests run everywhere, but tagging goes
+        // through Finder comments and Spotlight, which only exist on macOS.
+        return Err(NoteError::Failed(
+            "note stores notes as Finder comments for Spotlight, so it only works on macOS for now."
+                .into(),
+        ));
+    }
+    match action {
+        cli::Action::Help => Ok(()),
         cli::Action::Show { path } => show(path),
         cli::Action::Set { path, text } => set(path, &text),
         cli::Action::Clear { path } => clear(path),

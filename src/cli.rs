@@ -2,6 +2,7 @@ use crate::store::NoteError;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+#[derive(Debug)]
 pub enum Action {
     Help,
     Show {
@@ -217,24 +218,12 @@ mod tests {
 
     #[test]
     fn rejects_unknown_flags_and_an_empty_search() {
-        assert!(matches!(parse(&["--nope"]), Err(NoteError::Usage(_))));
-        assert!(matches!(parse(&["find"]), Err(NoteError::Usage(_))));
+        assert!(matches!(parse(["--nope"]), Err(NoteError::Usage(_))));
+        assert!(matches!(parse(["find"]), Err(NoteError::Usage(_))));
         assert!(matches!(
-            parse(&["clear", "extra"]),
+            parse(["clear", "extra"]),
             Err(NoteError::Usage(_))
         ));
-        assert!(matches!(parse(&["help"]), Ok(Action::Help)));
-    }
-}
-
-impl std::fmt::Debug for Action {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Action::Help => write!(f, "Help"),
-            Action::Show { path } => write!(f, "Show({path:?})"),
-            Action::Set { path, text } => write!(f, "Set({path:?}, {text:?})"),
-            Action::Clear { path } => write!(f, "Clear({path:?})"),
-            Action::Find { path, query } => write!(f, "Find({path:?}, {query:?})"),
-        }
+        assert!(matches!(parse(["help"]), Ok(Action::Help)));
     }
 }

@@ -1,3 +1,6 @@
+//! Live Spotlight check. It needs macOS with indexing turned on.
+#![cfg(target_os = "macos")]
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;

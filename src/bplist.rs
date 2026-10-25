@@ -241,8 +241,23 @@ mod tests {
             .collect()
     }
 
+    /// The system plist parser is Python's `plistlib`. Windows runners ship
+    /// `python`, not `python3`.
+    fn python() -> Command {
+        for name in ["python3", "python"] {
+            let found = Command::new(name)
+                .arg("--version")
+                .output()
+                .is_ok_and(|output| output.status.success());
+            if found {
+                return Command::new(name);
+            }
+        }
+        panic!("these tests need python3 (or python) on PATH for plistlib");
+    }
+
     fn python_loads(bytes: &[u8]) -> String {
-        let mut child = Command::new("python3")
+        let mut child = python()
             .arg("-c")
             .arg("import plistlib,sys; sys.stdout.write(plistlib.loads(sys.stdin.buffer.read()))")
             .stdin(std::process::Stdio::piped())
@@ -262,7 +277,7 @@ mod tests {
     }
 
     fn python_dumps(text: &str) -> Vec<u8> {
-        let mut child = Command::new("python3")
+        let mut child = python()
             .arg("-c")
             .arg(
                 "import io,plistlib,sys; buf=io.BytesIO(); plistlib.dump(sys.stdin.read(), buf, fmt=plistlib.FMT_BINARY); sys.stdout.buffer.write(buf.getvalue())",
