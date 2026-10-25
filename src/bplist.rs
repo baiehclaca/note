@@ -259,7 +259,7 @@ mod tests {
     fn python_loads(bytes: &[u8]) -> String {
         let mut child = python()
             .arg("-c")
-            .arg("import plistlib,sys; sys.stdout.write(plistlib.loads(sys.stdin.buffer.read()))")
+            .arg("import plistlib,sys; sys.stdout.buffer.write(plistlib.loads(sys.stdin.buffer.read()).encode('utf-8'))")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -280,7 +280,7 @@ mod tests {
         let mut child = python()
             .arg("-c")
             .arg(
-                "import io,plistlib,sys; buf=io.BytesIO(); plistlib.dump(sys.stdin.read(), buf, fmt=plistlib.FMT_BINARY); sys.stdout.buffer.write(buf.getvalue())",
+                "import io,plistlib,sys; buf=io.BytesIO(); plistlib.dump(sys.stdin.buffer.read().decode('utf-8'), buf, fmt=plistlib.FMT_BINARY); sys.stdout.buffer.write(buf.getvalue())",
             )
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
