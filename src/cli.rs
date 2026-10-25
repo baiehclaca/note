@@ -1,4 +1,4 @@
-use crate::store::NoteError;
+use crate::NoteError;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -135,14 +135,12 @@ fn set_mode(current: Mode, next: Mode) -> Result<Mode, NoteError> {
     Ok(next)
 }
 
-pub fn help_text() -> &'static str {
-    "\
-note tags the current folder so Spotlight can find it.
-
-The words you pass become the folder's Finder comment. Spotlight indexes
-that comment, so a search for those words returns the folder. Nothing is
-written inside the folder.
-
+/// The full `note --help` text. `intro` and `details` come from the
+/// platform backend because what stores and searches the note differs per OS.
+pub fn help_text(intro: &str, details: &str) -> String {
+    format!(
+        "\
+{intro}
 Usage:
   note [words...]          Set the note on this folder
   note                     Show the note
@@ -153,15 +151,13 @@ Usage:
   note -- clear            Save a note whose text is \"clear\"
   note -- help             Save a note whose text is \"help\"
 
-A note can be up to 2048 bytes. Search can take a few seconds. Spotlight
-skips hidden folders and temporary folders. The note is metadata on the
-folder, so it stays with the folder on this Mac and is not a file in git.
-
+{details}
 Examples:
   cd ~/Projects/client-work
   note prague pitch, march, the blue deck
   note find prague
 "
+    )
 }
 
 #[cfg(test)]
