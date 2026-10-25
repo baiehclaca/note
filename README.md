@@ -39,8 +39,14 @@ npm install -g @baiehclaca/note
 
 Or build from source: `cargo install --git https://github.com/baiehclaca/note`
 
-macOS only for now. Windows and Linux: coming.
+The npm package is macOS only for now. On Windows and Linux, build from source.
 
-**How it works:** your words become the folder's Finder comment, Spotlight indexes it, and nothing is added inside the folder.
+**How it works:** your words are stored as the folder's comment, and nothing is added inside the folder. Where that comment is searchable depends on your system:
+
+- **macOS:** the Finder comment. Spotlight and `note find` search it.
+- **Linux:** the `user.xdg.comment` attribute, shown by Dolphin and indexed by KDE Baloo (`baloosearch userComment:word`). GNOME search does not read it. `note find` scans your home folder.
+- **Windows:** an NTFS alternate data stream named `note.comment`. Windows Search can't see it, so `note find` scans your user folder.
+
+Notes don't survive FAT/exFAT, zip, git or most cloud sync.
 
 <sub><code>note</code> shows the note, <code>note clear</code> removes it. Notes hold up to 2048 bytes. Spotlight skips hidden folders and <code>/tmp</code>. <code>note -- clear</code> saves the word "clear".</sub>
