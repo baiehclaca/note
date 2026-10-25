@@ -25,7 +25,26 @@ pub fn resolve_folder(path: Option<&Path>) -> Result<PathBuf, NoteError> {
             canonical.display()
         )));
     }
-    Ok(canonical)
+    Ok(without_verbatim_prefix(canonical))
+}
+
+/// On Windows `canonicalize` returns `\\?\C:\...` paths. They work, but they
+/// are not what people type or what Explorer shows, so print the plain form.
+/// Rust's std adds the prefix back by itself when a path is too long.
+fn without_verbatim_prefix(path: PathBuf) -> PathBuf {
+    if !cfg!(windows) {
+        return path;
+    }
+    let Some(text) = path.to_str() else {
+        return path;
+    };
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => path,
+    }
 }
 
 /// Trims the note and checks it can be stored. Returns the text to store.
@@ -77,7 +96,7 @@ pub(crate) mod test_support {
             let path = std::env::temp_dir()
                 .join(format!("note-{label}-{}-{millis}-{n}", std::process::id()));
             std::fs::create_dir_all(&path).unwrap();
-            TempFolder(path.canonicalize().unwrap())
+            TempFolder(super::resolve_folder(Some(&path)).unwrap())
         }
     }
 
@@ -109,6 +128,21 @@ mod tests {
         let error = resolve_folder(Some(&gone)).unwrap_err();
         assert!(error.to_string().starts_with("No folder at"), "{error}");
         assert_eq!(resolve_folder(Some(&folder.0)).unwrap(), folder.0);
+    }
+
+    #[test]
+    fn verbatim_prefixes_are_dropped_on_windows() {
+        let plain = without_verbatim_prefix(PathBuf::from(r"\\?\C:\Users\me"));
+        let unc = without_verbatim_prefix(PathBuf::from(r"\\?\UNC\server\share\x"));
+        let device = without_verbatim_prefix(PathBuf::from(r"\\?\Volume{1}\x"));
+        if cfg!(windows) {
+            assert_eq!(plain, PathBuf::from(r"C:\Users\me"));
+            assert_eq!(unc, PathBuf::from(r"\\server\share\x"));
+        } else {
+            assert_eq!(plain, PathBuf::from(r"\\?\C:\Users\me"));
+            assert_eq!(unc, PathBuf::from(r"\\?\UNC\server\share\x"));
+        }
+        assert_eq!(device, PathBuf::from(r"\\?\Volume{1}\x"));
     }
 
     #[test]

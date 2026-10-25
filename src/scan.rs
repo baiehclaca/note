@@ -10,9 +10,11 @@ use crate::NoteError;
 use std::path::{Path, PathBuf};
 
 /// Folders under `root` (including `root`) whose note contains `query`,
-/// ignoring case. Hidden folders (name starting with `.`) below `root` are
-/// skipped, as Spotlight, Baloo and Windows Search skip them, and symbolic
-/// links and junctions are never followed, so the walk cannot loop.
+/// ignoring case. Hidden folders below `root` are skipped, as Spotlight,
+/// Baloo and Windows Search skip them: a name starting with `.` everywhere,
+/// plus the hidden or system attribute on Windows (which also keeps the
+/// walk out of `AppData`). Symbolic links and junctions are never followed,
+/// so the walk cannot loop.
 /// Folders that cannot be read are skipped silently.
 pub fn find_under<F>(root: &Path, query: &str, mut read_note: F) -> Vec<PathBuf>
 where
@@ -32,7 +34,7 @@ where
         for entry in entries.flatten() {
             // `file_type` does not follow links: a link to a folder is not a dir.
             let is_dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
-            if is_dir && !is_hidden(&entry.file_name()) {
+            if is_dir && !is_hidden(&entry) {
                 pending.push(entry.path());
             }
         }
@@ -49,8 +51,21 @@ pub fn note_matches(note: &str, query: &str) -> bool {
     note.to_lowercase().contains(&query.trim().to_lowercase())
 }
 
-fn is_hidden(name: &std::ffi::OsStr) -> bool {
-    name.to_string_lossy().starts_with('.')
+fn is_hidden(entry: &std::fs::DirEntry) -> bool {
+    if entry.file_name().to_string_lossy().starts_with('.') {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+        const FILE_ATTRIBUTE_SYSTEM: u32 = 0x4;
+        if let Ok(metadata) = entry.metadata() {
+            return metadata.file_attributes() & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)
+                != 0;
+        }
+    }
+    false
 }
 
 /// The folder `note find` walks when no `--path` is given: the user's home.
@@ -126,6 +141,44 @@ mod tests {
         let root = TempFolder::new("scan");
         let hits = find_under(&root.0, "x", |_| Err(NoteError::Failed("no".into())));
         assert!(hits.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn folders_with_the_hidden_attribute_are_skipped() {
+        let root = TempFolder::new("scan");
+        let hidden = root.0.join("hidden");
+        std::fs::create_dir_all(&hidden).unwrap();
+        let status = std::process::Command::new("attrib")
+            .arg("+h")
+            .arg(&hidden)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let hits = find_under(&root.0, "x", |_| Ok(Some("x".into())));
+        assert_eq!(hits, vec![root.0.clone()]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn junctions_are_not_followed() {
+        let root = TempFolder::new("scan");
+        let real = root.0.join("real");
+        std::fs::create_dir_all(&real).unwrap();
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(real.join("loop"))
+            .arg(&root.0)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let mut visited = Vec::new();
+        find_under(&root.0, "x", |folder| {
+            visited.push(folder.to_path_buf());
+            Ok(None)
+        });
+        visited.sort();
+        assert_eq!(visited, vec![root.0.clone(), real]);
     }
 
     #[cfg(unix)]

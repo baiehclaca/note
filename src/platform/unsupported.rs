@@ -10,7 +10,7 @@ pub struct Unsupported;
 
 fn unsupported() -> NoteError {
     NoteError::Failed(
-        "note has no way to store folder notes on this operating system yet. It works on macOS and Linux."
+        "note has no way to store folder notes on this operating system yet. It works on macOS, Linux and Windows."
             .into(),
     )
 }
@@ -36,7 +36,8 @@ impl Backend for Unsupported {
         "\
 note tags a folder with a note you can search for. This operating system
 is not supported yet; note works on macOS (Finder comment, searched by
-Spotlight) and Linux (user.xdg.comment extended attribute).
+Spotlight), Linux (user.xdg.comment extended attribute) and Windows (NTFS
+alternate data stream).
 "
     }
 
