@@ -22,6 +22,9 @@ const REPO = 'baiehclaca/note';
 const TARGETS = {
   'darwin-arm64': 'aarch64-apple-darwin',
   'darwin-x64': 'x86_64-apple-darwin',
+  'linux-x64': 'x86_64-unknown-linux-gnu',
+  'linux-arm64': 'aarch64-unknown-linux-gnu',
+  'win32-x64': 'x86_64-pc-windows-msvc',
 };
 
 const VENDOR_DIR = path.join(__dirname, '..', 'vendor');
@@ -39,7 +42,7 @@ function targetFor(platform, arch) {
 }
 
 function unsupportedMessage(platform, arch) {
-  return `note: no prebuilt binary for ${platform}-${arch}. note is macOS only for now; Windows and Linux are coming.`;
+  return `note: no prebuilt binary for ${platform}-${arch}. Supported: macOS, Linux and Windows on x64, plus macOS and Linux on arm64.`;
 }
 
 function assetName(version, target) {

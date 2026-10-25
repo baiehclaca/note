@@ -18,8 +18,10 @@ const root = path.join(__dirname, '..');
 test('maps supported platforms to release targets', () => {
   assert.strictEqual(installer.targetFor('darwin', 'arm64'), 'aarch64-apple-darwin');
   assert.strictEqual(installer.targetFor('darwin', 'x64'), 'x86_64-apple-darwin');
-  assert.strictEqual(installer.targetFor('linux', 'x64'), null);
-  assert.strictEqual(installer.targetFor('win32', 'x64'), null);
+  assert.strictEqual(installer.targetFor('linux', 'x64'), 'x86_64-unknown-linux-gnu');
+  assert.strictEqual(installer.targetFor('linux', 'arm64'), 'aarch64-unknown-linux-gnu');
+  assert.strictEqual(installer.targetFor('win32', 'x64'), 'x86_64-pc-windows-msvc');
+  assert.strictEqual(installer.targetFor('win32', 'arm64'), null);
   assert.strictEqual(installer.targetFor('darwin', 'ia32'), null);
 });
 
@@ -84,7 +86,7 @@ test('extracts the binary from a tar.gz made by system tar', { skip: !hasTar() }
 });
 
 test('unsupported platform: install resolves to null without throwing', async () => {
-  const result = await installer.install({ platform: 'linux', arch: 'x64' });
+  const result = await installer.install({ platform: 'freebsd', arch: 'x64' });
   assert.strictEqual(result, null);
 });
 

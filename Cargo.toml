@@ -1,6 +1,7 @@
 [package]
 name = "note"
 version = "1.0.0"
+license = "MIT"
 edition = "2021"
 description = "Tag a folder so Spotlight can find it"
 publish = false
