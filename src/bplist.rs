@@ -234,6 +234,85 @@ mod tests {
         assert!(err.0.contains("not a Finder comment"));
     }
 
+    #[test]
+    fn length_markers_switch_at_the_right_sizes() {
+        // Under 15 units the length lives in the marker; from 15 on it is a
+        // following int, one byte up to 255 and two bytes after that.
+        assert_eq!(encode_string(&"a".repeat(14)).unwrap()[8], 0x5e);
+        let fifteen = encode_string(&"a".repeat(15)).unwrap();
+        assert_eq!(&fifteen[8..11], &[0x5f, 0x10, 15]);
+        let big = encode_string(&"a".repeat(256)).unwrap();
+        assert_eq!(&big[8..12], &[0x5f, 0x11, 0x01, 0x00]);
+        let wide = encode_string("\u{e9}").unwrap();
+        assert_eq!(&wide[8..11], &[0x61, 0x00, 0xe9]);
+        for text in [
+            "a".repeat(14),
+            "a".repeat(15),
+            "a".repeat(255),
+            "a".repeat(256),
+            "\u{e9}".repeat(300),
+        ] {
+            assert_eq!(decode_string(&encode_string(&text).unwrap()).unwrap(), text);
+        }
+    }
+
+    #[test]
+    fn surrogate_pairs_count_as_two_units() {
+        let text = "\u{1F44B}".repeat(8);
+        let encoded = encode_string(&text).unwrap();
+        assert_eq!(&encoded[8..11], &[0x6f, 0x10, 16]);
+        assert_eq!(decode_string(&encoded).unwrap(), text);
+    }
+
+    #[test]
+    fn refuses_a_plist_spotlight_would_drop() {
+        assert!(encode_string(&"a".repeat(MAX_PLIST_BYTES - 50)).is_ok());
+        let err = encode_string(&"a".repeat(MAX_PLIST_BYTES)).unwrap_err();
+        assert!(err.0.contains("too long"), "{}", err.0);
+        // One non-ASCII character makes every character two bytes wide.
+        let mixed = format!("{}\u{e9}", "a".repeat(2000));
+        assert!(encode_string(&mixed).is_err());
+    }
+
+    #[test]
+    fn rejects_objects_that_are_not_strings() {
+        // A plist whose only object is the integer 5.
+        let mut int_plist = b"bplist00".to_vec();
+        int_plist.extend_from_slice(&[0x10, 0x05, 0x08]);
+        let mut trailer = [0u8; TRAILER_LEN];
+        trailer[6] = 1;
+        trailer[7] = 1;
+        trailer[15] = 1;
+        trailer[31] = 10;
+        int_plist.extend_from_slice(&trailer);
+        let err = decode_string(&int_plist).unwrap_err();
+        assert!(err.0.contains("not a Finder comment"), "{}", err.0);
+    }
+
+    #[test]
+    fn rejects_a_lone_surrogate() {
+        let mut bytes = encode_string("\u{e9}").unwrap();
+        bytes[9] = 0xd8;
+        bytes[10] = 0x00;
+        let err = decode_string(&bytes).unwrap_err();
+        assert!(err.0.contains("not valid text"), "{}", err.0);
+    }
+
+    #[test]
+    fn damaged_input_is_an_error_not_a_panic() {
+        let good = encode_string("Praha \u{2014} \"Q3\" line").unwrap();
+        for end in 0..good.len() {
+            let _ = decode_string(&good[..end]);
+        }
+        for index in 0..good.len() {
+            for value in [0x00, 0x0f, 0x7f, 0xff] {
+                let mut bad = good.clone();
+                bad[index] = value;
+                let _ = decode_string(&bad);
+            }
+        }
+    }
+
     fn decode_hex(hex: &str) -> Vec<u8> {
         (0..hex.len())
             .step_by(2)

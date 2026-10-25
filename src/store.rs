@@ -379,6 +379,47 @@ mod tests {
         std::fs::remove_dir_all(&folder).unwrap();
     }
 
+    #[test]
+    fn rejects_notes_spotlight_cannot_keep() {
+        let folder = temp_folder();
+        let long = "a".repeat(MAX_NOTE_BYTES + 1);
+        let error = set_note(&folder, &long).unwrap_err();
+        assert!(error.to_string().contains("at most 2048 bytes"), "{error}");
+        let error = set_note(&folder, "bell\u{7}").unwrap_err();
+        assert!(error.to_string().contains("control character"), "{error}");
+        // Mostly ASCII plus one accent is stored as UTF-16, which doubles it.
+        let mixed = format!("{}\u{e9}", "a".repeat(2000));
+        let error = set_note(&folder, &mixed).unwrap_err();
+        assert!(error.to_string().contains("too long"), "{error}");
+        std::fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[test]
+    fn query_turns_control_characters_into_spaces() {
+        assert_eq!(escape_query("a\tb\\c?'"), "a b\\\\c\\?\\'");
+    }
+
+    #[test]
+    fn usage_errors_exit_with_two() {
+        assert_eq!(NoteError::Usage("x".into()).code(), 2);
+        assert_eq!(NoteError::Missing("x".into()).code(), 1);
+        assert_eq!(NoteError::Failed("x".into()).code(), 1);
+        assert_eq!(NoteError::Failed("shown".into()).to_string(), "shown");
+    }
+
+    #[test]
+    fn a_missing_folder_is_named() {
+        let folder = temp_folder();
+        let gone = folder.join("gone");
+        let error = resolve_folder(Some(&gone)).unwrap_err();
+        assert!(error.to_string().starts_with("No folder at"), "{error}");
+        assert_eq!(
+            resolve_folder(Some(&folder)).unwrap(),
+            folder.canonicalize().unwrap()
+        );
+        std::fs::remove_dir_all(&folder).unwrap();
+    }
+
     fn temp_folder() -> PathBuf {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
