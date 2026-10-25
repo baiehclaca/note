@@ -14,6 +14,16 @@ pub const MAX_PLIST_BYTES: usize = 3700;
 #[derive(Debug, PartialEq, Eq)]
 pub struct PlistError(pub String);
 
+/// Bytes the string's characters take inside the plist: ASCII text is stored
+/// one byte per character, anything else as UTF-16, two bytes per unit.
+pub fn string_len(text: &str) -> usize {
+    if text.is_ascii() {
+        text.len()
+    } else {
+        text.encode_utf16().count() * 2
+    }
+}
+
 pub fn encode_string(text: &str) -> Result<Vec<u8>, PlistError> {
     let ascii = text.is_ascii();
     let count = if ascii {
@@ -262,6 +272,35 @@ mod tests {
         let encoded = encode_string(&text).unwrap();
         assert_eq!(&encoded[8..11], &[0x6f, 0x10, 16]);
         assert_eq!(decode_string(&encoded).unwrap(), text);
+    }
+
+    #[test]
+    fn string_len_matches_the_encoded_payload() {
+        // Short strings: header, one marker byte, the characters, the
+        // one-byte offset table and the trailer.
+        for text in ["", "blue", "Praha \u{2014}", "\u{1F44B} hi", "caf\u{e9}"] {
+            let encoded = encode_string(text).unwrap();
+            assert_eq!(
+                encoded.len(),
+                8 + 1 + string_len(text) + 1 + TRAILER_LEN,
+                "{text}"
+            );
+        }
+        assert_eq!(string_len("caf\u{e9}"), 8);
+        assert_eq!(string_len("\u{1F44B}"), 4);
+    }
+
+    #[test]
+    fn every_note_within_the_limit_fits_the_plist() {
+        let limit = crate::folder::MAX_NOTE_BYTES;
+        for text in [
+            "a".repeat(limit),
+            format!("{}\u{e9}", "a".repeat(limit / 2 - 1)),
+            "\u{1F44B}".repeat(limit / 4),
+        ] {
+            assert!(string_len(&text) <= limit);
+            assert!(encode_string(&text).is_ok());
+        }
     }
 
     #[test]

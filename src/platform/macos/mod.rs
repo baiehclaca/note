@@ -64,6 +64,10 @@ impl Backend for MacOs {
         Ok(warnings)
     }
 
+    fn stored_len(&self, text: &str) -> usize {
+        bplist::string_len(text)
+    }
+
     fn clear(&self, folder: &Path) -> Result<(), NoteError> {
         let _ = sync_finder(folder, "");
         delete_xattr(folder)
@@ -104,8 +108,11 @@ written inside the folder.
 
     fn help_details(&self) -> &'static str {
         "\
-A note can be up to 2048 bytes. Search can take a few seconds. Spotlight
-skips hidden folders and temporary folders. The note is metadata on the
+A note can be up to 2048 bytes as macOS stores it: one byte per character
+when it is plain ASCII, but two bytes per character (four for most emoji)
+once it has any other character, so about 1024 characters with an accent.
+Search can take a few seconds. Spotlight skips hidden folders and
+temporary folders. The note is metadata on the
 folder, so it stays with the folder on this Mac and is not a file in git.
 "
     }
@@ -334,6 +341,20 @@ mod tests {
         assert!(spotlight_skips(Path::new("/Users/me/.hidden/work")));
         assert!(spotlight_skips(Path::new("/Users/me/work/.git")));
         assert!(!spotlight_skips(Path::new("/Users/me/Projects/client")));
+    }
+
+    #[test]
+    fn the_limit_counts_what_the_comment_stores() {
+        let backend = MacOs;
+        assert_eq!(backend.stored_len(&"a".repeat(2048)), 2048);
+        assert_eq!(
+            backend.stored_len(&format!("{}\u{e9}", "a".repeat(1023))),
+            2048
+        );
+        assert_eq!(backend.stored_len("\u{1F44B}"), 4);
+        assert!(backend
+            .help_details()
+            .contains("2048 bytes as macOS stores it"));
     }
 
     #[test]

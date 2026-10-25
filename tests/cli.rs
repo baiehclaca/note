@@ -50,6 +50,50 @@ fn a_file_and_an_empty_note_fail() {
     fs::remove_dir_all(&folder).unwrap();
 }
 
+/// The limit is in the bytes the OS stores: UTF-16 for a non-ASCII Finder
+/// comment on macOS, UTF-8 elsewhere.
+#[test]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
+fn the_note_limit_is_in_stored_bytes() {
+    let folder = temp_folder();
+    let too_long = note(&folder, &[&"a".repeat(2049)]);
+    assert_eq!(too_long.status.code(), Some(1));
+    assert!(
+        stderr(&too_long).contains("at most 2048 bytes"),
+        "{}",
+        stderr(&too_long)
+    );
+
+    let fits_everywhere = format!("{}\u{e9}", "a".repeat(1023));
+    let set = note(&folder, &[&fits_everywhere]);
+    assert!(set.status.success(), "{}", stderr(&set));
+
+    // 1201 characters: 1202 bytes of UTF-8, 2402 bytes of UTF-16.
+    let accented = format!("{}\u{e9}", "a".repeat(1200));
+    let set = note(&folder, &[&accented]);
+    if cfg!(target_os = "macos") {
+        assert_eq!(set.status.code(), Some(1));
+        assert!(
+            stderr(&set).contains("takes 2402 bytes"),
+            "{}",
+            stderr(&set)
+        );
+        let show = note(&folder, &[]);
+        assert_eq!(
+            String::from_utf8_lossy(&show.stdout),
+            format!("{fits_everywhere}\n")
+        );
+    } else {
+        assert!(set.status.success(), "{}", stderr(&set));
+        let show = note(&folder, &[]);
+        assert_eq!(
+            String::from_utf8_lossy(&show.stdout),
+            format!("{accented}\n")
+        );
+    }
+    fs::remove_dir_all(&folder).unwrap();
+}
+
 #[test]
 fn help_exits_cleanly() {
     let folder = temp_folder();

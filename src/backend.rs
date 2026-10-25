@@ -17,6 +17,13 @@ pub trait Backend {
     /// user when the note was saved but something about it is degraded.
     fn write(&self, folder: &Path, text: &str) -> Result<Vec<String>, NoteError>;
 
+    /// How many bytes `text` takes in the form this OS stores it. The note
+    /// limit ([`crate::folder::MAX_NOTE_BYTES`]) is checked against this, so
+    /// it means the same thing as the help text. The default is UTF-8.
+    fn stored_len(&self, text: &str) -> usize {
+        text.len()
+    }
+
     /// Removes the note. Clearing a folder without a note is not an error.
     fn clear(&self, folder: &Path) -> Result<(), NoteError>;
 
@@ -46,6 +53,8 @@ pub(crate) mod memory {
         pub notes: RefCell<BTreeMap<PathBuf, String>>,
         pub warnings: Vec<String>,
         pub fail_with: Option<String>,
+        /// Store notes as UTF-16, the way macOS stores a non-ASCII note.
+        pub utf16: bool,
     }
 
     impl MemoryBackend {
@@ -69,6 +78,14 @@ pub(crate) mod memory {
                 .borrow_mut()
                 .insert(folder.to_path_buf(), text.to_string());
             Ok(self.warnings.clone())
+        }
+
+        fn stored_len(&self, text: &str) -> usize {
+            if self.utf16 {
+                text.encode_utf16().count() * 2
+            } else {
+                text.len()
+            }
         }
 
         fn clear(&self, folder: &Path) -> Result<(), NoteError> {
